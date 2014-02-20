@@ -15,10 +15,14 @@
 
 ;; module-scope a hash map symbol -> (listof symbol) indicating the module level
 ;; binding including the current module.
-(struct Context (scope module-scope))
 
-(define (context)
-  (Context (set) #hash()))
+;; module-provide
+(struct Context (scope module-scope module-provide))
+
+(define (context #:scope [scope set] 
+                 #:module-scope [module-scope #hash()]
+                 #:module-provide [module-provide #hash()])
+  (Context scope module-scope module-provide))
 
 (define (remove-binding context sym)
   (struct-copy Context context
@@ -72,6 +76,7 @@
 
 ;;    [(list-rest '#%app id args)
     
+    ;; no change in scope? (local / non local)
     [(list 'define-values (list arg) expr)
      (Assign
       (VariableAccess (list (symbol->string arg)))
@@ -91,9 +96,25 @@
      [(list 'module name 'racket/base (list-rest '#%module-begin (list-rest 'module _) body))
       (emit-module scope name body)]
     
+     [(list-rest (or 'provide 'require) _)
+      #f]
+     
       [_ (raise (format "unknown ~a" expr))]))
 
+(define (list-subtract lst lst0)
+  (set->list
+   (set-subtract
+    (list->set lst)
+    (list->set lst0))))
+  
+(define (symbol-append sym sym0)
+  (string->symbol
+   (string-append
+    (symbol->string sym)
+    (symbol->string sym0))))
+   
 (define (emit-module scope module-name stmts)
+  (define complete-module-name (list "window" "racketjs" "module" (symbol->js-compatible-string module-name)))
   (define module-definition-names
     (flatten
      (map
@@ -102,8 +123,28 @@
         args]
        [_ '()])
       stmts)))
-  (define module-scope (Context
-                        (set) 
+  (define provides 
+    (let ([provided (make-hash)])
+      (for ([stmt stmts])
+        (match stmt
+          [(list 'provide phaseless-spec)
+           (match phaseless-spec
+             [(and (? symbol?) sym)
+              (hash-set! provided sym sym)]
+             [(list 'rename (and (? symbol?) local-id) (and (? symbol?) export-id))
+              (hash-set! provided local-id export-id)]
+             [(list 'all-defined)
+              (map (lambda (sym) (hash-set! provided sym sym)) module-definition-names)]
+             [(list 'prefix-all-defined (and (? symbol?) prefix-id))
+              (map (lambda (sym) (hash-set! provided sym (symbol-append prefix-id sym))) module-definition-names)]
+             [(list-rest 'all-defined-except ids)
+              (map (lambda (sym) (hash-set! provided sym sym)) (list-subtract module-definition-names ids))]
+             [(list-rest 'prefix-all-defined-except (and (? symbol?) prefix-id) ids)
+              (map (lambda (sym) (hash-set! provided sym (symbol-append prefix-id sym))) (list-subtract module-definition-names ids))])]))
+      (make-immutable-hash (hash->list provided))))
+;;  (define required ...)
+  (define module-scope (context
+                        #:module-scope ; add required elements
                         (apply 
                          hash 
                          (flatten 
@@ -112,11 +153,12 @@
                            module-definition-names)))))
   (define emit-stmts
     (flatten
-     (map 
-      (curry emit module-scope)
-      stmts)))
+     (filter values ; remove #f emit return
+             (map 
+              (curry emit module-scope)
+              stmts))))
   (Assign
-   (VariableAccess (list "window" "racketjs" "module" (symbol->js-compatible-string module-name)))
+   (VariableAccess complete-module-name)
    (FunctionCall
     (FunctionExpr
      empty
@@ -125,7 +167,15 @@
        (lambda (name)
          (VariableDcl (symbol->string name) (Null)))
        module-definition-names)
-      emit-stmts))
+      emit-stmts
+      (list
+       (Return 
+        (ObjectExpr
+         (map 
+          (for/list ([(k v) (in-hash provides)])
+            (cons
+             (symbol->js-compatible-string k)
+             (Literal (symbol->js-compatible-string v))))))))))
     empty)))
 
 (define (symbol->js-compatible-string name)
@@ -142,8 +192,6 @@
 
 ;; Comment se comporte define-value par exemple: (define-value (a b) (une-fonction-qui-retourne-value))
 ;; pareil avec let-values
-
-;; comment se comporte l'ordre de declaration des define du niveau module -- pas de detection d'ordre je dois me demerdé
 
 ;; liste des binding de racket/base (variable, syntax)
 ;;   (0
