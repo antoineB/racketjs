@@ -179,8 +179,8 @@
     empty)))
 
 (define (symbol->js-compatible-string name)
-  (let loop ([pattern '("/" "?" "!" "-" "%" ">" "<" "=")]
-             [change '("_SLASH_" "_QUESTION_" "_IMPORTANT_" "_HYPHEN_" "_PERCENT_" "_GREATER_" "_LESS_" "_EQUAL_")]
+  (let loop ([pattern '("/" "?" "!" "-" "%" ">" "<" "=" "." "_")]
+             [change '("_SLASH_" "_QUESTION_" "_IMPORTANT_" "_HYPHEN_" "_PERCENT_" "_GREATER_" "_LESS_" "_EQUAL_" "_DOT_" "_U_")]
              [str (symbol->string name)])
     (if (empty? pattern)
         str
