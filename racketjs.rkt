@@ -14,26 +14,43 @@
                  (Literal false)
                  expr)))
 
-;; scope a set of symbol indicating the current local binding
+;; funtion-scope a hash map symbol -> (listof string)
 
 ;; module-scope a hash map symbol -> (listof symbol) indicating the module level
 ;; binding including the current module.
 
 ;; module-provide
-(struct Context (scope module-scope module-provide))
+(struct Context (function-scope module-scope module-provide))
 
-(define (context #:scope [scope set] 
+(define (context #:function-scope [function-scope set] 
                  #:module-scope [module-scope #hash()]
                  #:module-provide [module-provide #hash()])
-  (Context scope module-scope module-provide))
+  (Context function-scope module-scope module-provide))
 
-(define (remove-binding context sym)
-  (struct-copy Context context
-	       [scope (set-remove (Context-scope context) sym)]))
+(define (coerce-list elem)
+  (if (list? elem)
+      elem
+      (list elem)))
 
-(define (add-binding context sym)
-  (struct-copy Context context
-	       [scope (set-add (Context-scope context) sym)]))
+(define (get-binding-path ctxt name)
+  (coerce-list
+   (or
+    (hash-ref
+     (Context-function-scope ctxt)
+     name
+     #f)
+    (hash-ref
+     (Context-module-scope ctxt)
+     name
+     (raise (format "The symbol ~a is not in scope" name))))))
+
+;; (define (remove-binding context sym)
+;;   (struct-copy Context context
+;; 	       [function-scope (hash-remove (Context-function-scope context) sym)]))
+
+;; (define (add-binding context sym)
+;;   (struct-copy Context context
+;; 	       [scope (set-add (Context-scope context) sym)]))
 
 (define (literal? expr)
   (or (boolean? expr)
@@ -45,7 +62,12 @@
 (define (emit scope expr)
   (match expr
     
-    [(list 'quote (? literal? expr))
+    [(? symbol?)
+     (VariableAccess (get-binding-path expr))]
+    
+    ;;[(list 'quote (and (? list?) expr))
+    
+    [(list 'quote (and (? literal?) expr))
      (Literal expr)]
 
     [(list 'quote (? symbol? expr))
@@ -77,7 +99,9 @@
       (emit scope then)
       (emit scope else))]
 
-;;    [(list-rest '#%app id args)
+    [(list-rest '#%app id args)
+     (FunctionCall (VariableAccess (get-binding-path scope id))
+                   (map (curry emit scope) args))]
     
     ;; no change in scope? (local / non local)
     [(list 'define-values (list arg) expr)
@@ -94,7 +118,8 @@
        args
        exprs)]
 
-;;       [(list 'let-values args (list-rest 'values exprs))
+     ;;  [(list 'let-values args (list-rest 'values exprs))
+     ;; Need to create a (function (...) { ...; return ...;})()
      
      [(list 'module name 'racket/base (list-rest '#%module-begin (list-rest 'module _) body))
       (emit-module scope name body)]
