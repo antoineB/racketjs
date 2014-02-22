@@ -2,6 +2,9 @@
 
 (require "js-ast.rkt")
 
+(module+ test
+  (require rackunit))
+
 (define (list-symbols->list-strings lst)
   (map symbol->js-compatible-string lst))
 
@@ -37,7 +40,7 @@
       (string? expr)
       (number? expr)))
 
-;; scope hash table string -> string
+;; scope : Context
 ;; maintaint a mapping of variable (when we introduce new names)
 (define (emit scope expr)
   (match expr
@@ -178,17 +181,29 @@
              (Literal (symbol->js-compatible-string v))))))))))
     empty)))
 
-(define (symbol->js-compatible-string name)
-  (let loop ([pattern '("/" "?" "!" "-" "%" ">" "<" "=" "." "_")]
-             [change '("_SLASH_" "_QUESTION_" "_IMPORTANT_" "_HYPHEN_" "_PERCENT_" "_GREATER_" "_LESS_" "_EQUAL_" "_DOT_" "_U_")]
-             [str (symbol->string name)])
-    (if (empty? pattern)
-        str
-        (loop
-         (rest pattern)
-         (rest change)
-         (string-replace str (first pattern) (first change))))))
-  
+(define-values (symbol->js-compatible-string js-compatible-string->symbol)
+  (let ([rkt '("_" "/" "?" "!" "-" "%" ">" "<" "=" ".")]
+        [js '("_U_" "_SLASH_" "_QUESTION_" "_IMPORTANT_" "_H_" "_PERCENT_" "_GREATER_" "_LESS_" "_EQUAL_" "_DOT_")])  
+    (define (transform pattern change fn-start fn-end name)
+      (let loop ([pattern pattern]
+                 [change change]
+                 [str (fn-start name)])
+        (if (empty? pattern)
+            (fn-end str)
+            (loop
+             (rest pattern)
+             (rest change)
+             (string-replace str (first pattern) (first change))))))
+    (values
+     (curry transform rkt js symbol->string values)
+     (curry transform js rkt values string->symbol))))
+
+(module+ test
+  (check-equal? (symbol->js-compatible-string 'string?) "string_QUESTION_")
+  (check-equal? (symbol->js-compatible-string 'hash-add!) "hash_H_add_IMPORTANT_")
+  (check-equal? (js-compatible-string->symbol "abc_H__U_") 'abc-_)
+)
+
 
 ;; Comment se comporte define-value par exemple: (define-value (a b) (une-fonction-qui-retourne-value))
 ;; pareil avec let-values
