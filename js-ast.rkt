@@ -185,7 +185,7 @@
      "(null)"]
 
     [(Undefined)
-     "(undefined)"]
+     "(void 0)"]
 
     [(VariableDcl name right)
      (format "var ~a = ~a;"
@@ -271,6 +271,6 @@
     ;; Catch
 
     [(Return expr)
-     (with-paren 
+     (string-append
       "return "
       (print-js-ast expr))]))

@@ -11,204 +11,12 @@
 (define (is-true expr)
   (Unary 'NEG
          (Binary 'IS_IDENTICAL
-                 (Literal false)
+                 (Literal #f)
                  expr)))
 
-;; funtion-scope a hash map symbol -> (listof string)
-
-;; module-scope a hash map symbol -> (listof symbol) indicating the module level
-;; binding including the current module.
-
-;; module-provide
-(struct Context (function-scope module-scope module-provide))
-
-(define (context #:function-scope [function-scope set] 
-                 #:module-scope [module-scope #hash()]
-                 #:module-provide [module-provide #hash()])
-  (Context function-scope module-scope module-provide))
-
-(define (coerce-list elem)
-  (if (list? elem)
-      elem
-      (list elem)))
-
-(define (get-binding-path ctxt name)
-  (coerce-list
-   (or
-    (hash-ref
-     (Context-function-scope ctxt)
-     name
-     #f)
-    (hash-ref
-     (Context-module-scope ctxt)
-     name
-     (raise (format "The symbol ~a is not in scope" name))))))
-
-;; (define (remove-binding context sym)
-;;   (struct-copy Context context
-;; 	       [function-scope (hash-remove (Context-function-scope context) sym)]))
-
-;; (define (add-binding context sym)
-;;   (struct-copy Context context
-;; 	       [scope (set-add (Context-scope context) sym)]))
-
-(define (literal? expr)
-  (or (boolean? expr)
-      (string? expr)
-      (number? expr)))
-
-;; scope : Context
-;; maintaint a mapping of variable (when we introduce new names)
-(define (emit scope expr)
-  (match expr
-    
-    [(? symbol?)
-     (VariableAccess (get-binding-path expr))]
-    
-    ;;[(list 'quote (and (? list?) expr))
-    
-    [(list 'quote (and (? literal?) expr))
-     (Literal expr)]
-
-    [(list 'quote (? symbol? expr))
-     (New (FunctionCall 
-           (VariableAccess '("window" "racketjs" "Symbol"))
-           (list (symbol->js-compatible-string expr))))]
-     
-    [(list-rest 'lambda args body)
-     ;;TODO: use the arguments of js function to catch rest arg
-     (FunctionExpr (list-symbols->list-strings args) (map (curry emit scope) body))]
-    
-    [(list-rest 'begin body)
-     (FunctionCall
-      (FunctionExpr empty (map (curry emit scope)  body))
-      empty)]
-    
-    [(list-rest 'begin0 first body)
-     (FunctionCall
-      (FunctionExpr '("begin0")
-                    (append
-                     (map (curry emit scope) body)
-                     (list
-                      (Return (VariableAccess '("begin0"))))))
-      (emit scope first))]
-    
-    [(list 'if test then else)
-     (IfStmt
-      (is-true (emit scope test))
-      (emit scope then)
-      (emit scope else))]
-
-    [(list-rest '#%app id args)
-     (FunctionCall (VariableAccess (get-binding-path scope id))
-                   (map (curry emit scope) args))]
-    
-    ;; no change in scope? (local / non local)
-    [(list 'define-values (list arg) expr)
-     (Assign
-      (VariableAccess (list (symbol->string arg)))
-      (emit scope expr))]
-     
-     [(list 'define-values args (list-rest 'values exprs))
-      (map
-       (lambda (arg expr)
-         (Assign
-          (VariableAccess (list (symbol->string arg)))
-          (emit scope expr)))
-       args
-       exprs)]
-
-     ;;  [(list 'let-values args (list-rest 'values exprs))
-     ;; Need to create a (function (...) { ...; return ...;})()
-     
-     [(list 'module name 'racket/base (list-rest '#%module-begin (list-rest 'module _) body))
-      (emit-module scope name body)]
-    
-     [(list-rest (or 'provide 'require) _)
-      #f]
-     
-      [_ (raise (format "unknown ~a" expr))]))
-
-(define (list-subtract lst lst0)
-  (set->list
-   (set-subtract
-    (list->set lst)
-    (list->set lst0))))
-  
-(define (symbol-append sym sym0)
-  (string->symbol
-   (string-append
-    (symbol->string sym)
-    (symbol->string sym0))))
-   
-(define (emit-module scope module-name stmts)
-  (define complete-module-name (list "window" "racketjs" "module" (symbol->js-compatible-string module-name)))
-  (define module-definition-names
-    (flatten
-     (map
-      (match-lambda
-       [(list 'define-values args _)
-        args]
-       [_ '()])
-      stmts)))
-  (define provides 
-    (let ([provided (make-hash)])
-      (for ([stmt stmts])
-        (match stmt
-          [(list 'provide phaseless-spec)
-           (match phaseless-spec
-             [(and (? symbol?) sym)
-              (hash-set! provided sym sym)]
-             [(list 'rename (and (? symbol?) local-id) (and (? symbol?) export-id))
-              (hash-set! provided local-id export-id)]
-             [(list 'all-defined)
-              (map (lambda (sym) (hash-set! provided sym sym)) module-definition-names)]
-             [(list 'prefix-all-defined (and (? symbol?) prefix-id))
-              (map (lambda (sym) (hash-set! provided sym (symbol-append prefix-id sym))) module-definition-names)]
-             [(list-rest 'all-defined-except ids)
-              (map (lambda (sym) (hash-set! provided sym sym)) (list-subtract module-definition-names ids))]
-             [(list-rest 'prefix-all-defined-except (and (? symbol?) prefix-id) ids)
-              (map (lambda (sym) (hash-set! provided sym (symbol-append prefix-id sym))) (list-subtract module-definition-names ids))])]))
-      (make-immutable-hash (hash->list provided))))
-;;  (define required ...)
-  (define module-scope (context
-                        #:module-scope ; add required elements
-                        (apply 
-                         hash 
-                         (flatten 
-                          (map 
-                           (lambda (name) (let ([n (symbol->js-compatible-string name)]) (cons n n)))
-                           module-definition-names)))))
-  (define emit-stmts
-    (flatten
-     (filter values ; remove #f emit return
-             (map 
-              (curry emit module-scope)
-              stmts))))
-  (Assign
-   (VariableAccess complete-module-name)
-   (FunctionCall
-    (FunctionExpr
-     empty
-     (append
-      (map
-       (lambda (name)
-         (VariableDcl (symbol->string name) (Null)))
-       module-definition-names)
-      emit-stmts
-      (list
-       (Return 
-        (ObjectExpr
-         (map 
-          (for/list ([(k v) (in-hash provides)])
-            (cons
-             (symbol->js-compatible-string k)
-             (Literal (symbol->js-compatible-string v))))))))))
-    empty)))
-
 (define-values (symbol->js-compatible-string js-compatible-string->symbol)
-  (let ([rkt '("_" "/" "?" "!" "-" "%" ">" "<" "=" ".")]
-        [js '("_U_" "_SLASH_" "_QUESTION_" "_IMPORTANT_" "_H_" "_PERCENT_" "_GREATER_" "_LESS_" "_EQUAL_" "_DOT_")])  
+  (let ([rkt '("_" "/" "?" "!" "-" "%" ">" "<" "=" "." "*" "+" "-")]
+        [js '("_U_" "_SLASH_" "_QUESTION_" "_IMPORTANT_" "_H_" "_PERCENT_" "_GREATER_" "_LESS_" "_EQUAL_" "_DOT_" "_TIMES_" "_PLUS_" "_MINUS_")])  
     (define (transform pattern change fn-start fn-end name)
       (let loop ([pattern pattern]
                  [change change]
@@ -229,9 +37,242 @@
   (check-equal? (js-compatible-string->symbol "abc_H__U_") 'abc-_)
 )
 
+;; funtion-scope a hash map symbol -> (listof string)
 
-;; Comment se comporte define-value par exemple: (define-value (a b) (une-fonction-qui-retourne-value))
-;; pareil avec let-values
+;; module-scope a hash map symbol -> (listof symbol) indicating the module level
+;; binding including the current module.
+
+;; module-provide
+(struct Context (function-scope module-scope module-provide))
+
+(define (context #:function-scope [function-scope #hash()]
+                 #:module-scope [module-scope #hash()]
+                 #:module-provide [module-provide #hash()])
+  (Context function-scope module-scope module-provide))
+
+(define (coerce-list elem)
+  (if (list? elem)
+      elem
+      (list elem)))
+
+(define (get-binding-path ctxt name)
+  (coerce-list
+   (or
+    (hash-ref
+     (Context-function-scope ctxt)
+     name
+     #f)
+    (hash-ref
+     (Context-module-scope ctxt)
+     name
+     (thunk (raise (format "The symbol ~a is not in scope" name)))))))
+
+(define (add-local-scope ctxt lst)
+  (struct-copy Context ctxt
+               [function-scope
+                (apply hash-set* (list* (Context-function-scope ctxt) lst))]))
+
+;; (define (remove-binding context sym)
+;;   (struct-copy Context context
+;;            [function-scope (hash-remove (Context-function-scope context) sym)]))
+
+;; (define (add-binding context sym)
+;;   (struct-copy Context context
+;;            [scope (set-add (Context-scope context) sym)]))
+
+(define (literal? expr)
+  (or (boolean? expr)
+      (string? expr)
+      (number? expr)))
+
+;; scope : Context
+;; maintaint a mapping of variable (when we introduce new names)
+(define (emit scope expr)
+  (match expr
+
+    [(? symbol?)
+     (VariableAccess (get-binding-path scope expr))]
+
+    [(list 'quote (? literal? expr))
+     (Literal expr)]
+
+    [(list 'quote (? empty? expr))
+     (VariableAccess '("window" "racketjs" "module" "racketjs" "empty"))]
+
+    ;;[(list 'quote (? list? expr))
+
+    [(list 'quote (? symbol? expr))
+     (New (FunctionCall
+           (VariableAccess '("window" "racketjs" "Symbol"))
+           (list (symbol->js-compatible-string expr))))]
+
+    [(list-rest 'lambda args body)
+     ;;TODO: use the arguments of js function to catch rest arg
+     (FunctionExpr
+      (list-symbols->list-strings args)
+      (let ([scope (add-local-scope scope
+                                         (flatten
+                                          (map
+                                           (lambda (sym) (list sym (symbol->js-compatible-string sym)))
+                                           args)))])
+        (let loop ([exprs body]
+                   [result (list)])
+          (if (empty? exprs)
+              (if (empty? result)
+                  empty
+                  (reverse
+                   (cons
+                    (Return
+                     (first result))
+                    (rest result))))
+              (loop
+               (rest exprs)
+               (cons
+                (emit scope (first exprs))
+                result))))))]
+
+    [(list-rest 'begin body)
+     (FunctionCall
+      (FunctionExpr empty (map (curry emit scope)  body))
+      empty)]
+
+    [(list-rest 'begin0 first body)
+     (FunctionCall
+      (FunctionExpr '("begin0")
+                    (append
+                     (map (curry emit scope) body)
+                     (list
+                      (Return (VariableAccess '("begin0"))))))
+      (emit scope first))]
+
+    [(list 'if test then else)
+     (ConditionalOp
+      (is-true (emit scope test))
+      (emit scope then)
+      (emit scope else))]
+
+    [(list-rest '#%app id args)
+     (FunctionCall (VariableAccess (get-binding-path scope id))
+                   (map (curry emit scope) args))]
+
+    ;; no change in scope? (local / non local)
+    [(list 'define-values (list arg) expr)
+     (Assign
+      (VariableAccess (list (symbol->string arg)))
+      (emit scope expr))]
+
+     [(list 'define-values args (list-rest 'values exprs))
+      (map
+       (lambda (arg expr)
+         (Assign
+          (VariableAccess (list (symbol->string arg)))
+          (emit scope expr)))
+       args
+       exprs)]
+
+     ;;  [(list 'let-values args (list-rest 'values exprs))
+     ;; Need to create a (function (...) { ...; return ...;})()
+
+     [(list 'module name 'racket/base (list-rest '#%module-begin (list-rest 'module _) body))
+      (emit-module scope name body)]
+
+     [(list-rest (or '#%provide '#%require) _)
+      #f]
+
+     [_ (raise (format "unknown ~a" expr))]))
+
+(define (list-subtract lst lst0)
+  (set->list
+   (set-subtract
+    (list->set lst)
+    (list->set lst0))))
+
+(define (symbol-append sym sym0)
+  (string->symbol
+   (string-append
+    (symbol->string sym)
+    (symbol->string sym0))))
+
+(define base-exports
+  (apply
+   hash
+   (foldr
+    (lambda (sym sum)
+       (cons
+	sym
+	(cons
+	 (list "window" "racketjs" "module" "racketjs" (symbol->js-compatible-string sym))
+	 sum)))
+    empty
+    '(+ empty list cons first rest car cdr list? empty? pair? number? string? symbol?))))
+
+(define (emit-module scope module-name stmts)
+  (define complete-module-name (list "window" "racketjs" "module" (symbol->js-compatible-string module-name)))
+  (define module-definition-names
+    (flatten
+     (map
+      (match-lambda
+       [(list 'define-values args _)
+        args]
+       [_ '()])
+      stmts)))
+  (define provides
+    (let ([provided (make-hash)])
+      (for ([stmt stmts])
+        (match stmt
+          [(list '#%provide phaseless-spec)
+           (match phaseless-spec
+             [(? symbol? sym)
+              (hash-set! provided sym sym)]
+             [(list 'rename (? symbol? local-id) (? symbol? export-id))
+              (hash-set! provided local-id export-id)]
+             [(list 'all-defined)
+              (map (lambda (sym) (hash-set! provided sym sym)) module-definition-names)]
+             [(list 'prefix-all-defined (? symbol? prefix-id))
+              (map (lambda (sym) (hash-set! provided sym (symbol-append prefix-id sym))) module-definition-names)]
+             [(list-rest 'all-defined-except ids)
+              (map (lambda (sym) (hash-set! provided sym sym)) (list-subtract module-definition-names ids))]
+             [(list-rest 'prefix-all-defined-except (? symbol? prefix-id) ids)
+              (map (lambda (sym) (hash-set! provided sym (symbol-append prefix-id sym))) (list-subtract module-definition-names ids))]
+             [_ (void)])]
+          [_ (void)]))
+      (make-immutable-hash (hash->list provided))))
+;;  (define required ...)
+  (define module-scope (context
+                        #:module-scope ; add required elements
+                        (apply
+                         hash-set*
+                         (list*
+                          base-exports
+                          (flatten
+                           (map
+                            (lambda (name) (let ([n (symbol->js-compatible-string name)]) (cons n n)))
+                            module-definition-names))))))
+  (define emit-stmts
+    (flatten
+     (filter values ; remove #f emit return
+             (map
+              (curry emit module-scope)
+              stmts))))
+  (Assign
+   (VariableAccess complete-module-name)
+   (FunctionCall
+    (FunctionExpr
+     empty
+     (append
+      (map
+       (lambda (name)
+         (VariableDcl (symbol->string name) (Null)))
+       module-definition-names)
+      emit-stmts
+      (list
+       (Return
+        (ObjectExpr
+         (for/list ([(k v) (in-hash provides)])
+           (cons
+            (symbol->js-compatible-string k)
+            (Literal (symbol->js-compatible-string v)))))))))
+    empty)))
 
 ;; liste des binding de racket/base (variable, syntax)
 ;;   (0
