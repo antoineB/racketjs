@@ -151,6 +151,21 @@
       (emit scope then)
       (emit scope else))]
 
+    [(list-rest '#%app 'apply id args)
+     (FunctionCall
+      (VariableAccess (append (get-binding-path scope id) '("call")))
+      (list*
+       (Null)
+       (map (curry emit scope) args)))]
+
+    [(list '#%app 'values arg)
+     (emit scope arg)]
+    
+    [(list-rest '#%app 'values args)
+     (New
+      (FunctionCall (VariableAccess '("window" "racketjs" "Values"))
+                    (map (curry emit scope) args)))]
+
     [(list-rest '#%app id args)
      (FunctionCall (VariableAccess (get-binding-path scope id))
                    (map (curry emit scope) args))]
@@ -169,6 +184,27 @@
           (emit scope expr)))
        args
        exprs)]
+     
+     [(list 'define-values args expr)
+      (FunctionCall
+       (FunctionExpr
+        empty
+       (cons
+        (VariableDcl "tmp" (FieldAccess (emit scope expr) "data"))
+        (let loop ([i 0]
+                   [args (map symbol->js-compatible-string args)]
+                   [result empty])
+          (if (empty? args)
+              (reverse result)
+              (loop
+               (add1 i)
+               (rest args)
+               (cons
+                (Assign
+                 (VariableAccess (list (first args)))
+                 (ArrayCall (VariableAccess "tmp") (Literal i)))
+                result))))))
+       empty)]
 
      ;;  [(list 'let-values args (list-rest 'values exprs))
      ;; Need to create a (function (...) { ...; return ...;})()
@@ -205,6 +241,8 @@
 	 sum)))
     empty
     '(+ empty list cons first rest car cdr list? empty? pair? number? string? symbol?))))
+
+;;TODO: Change the order of assignment of module level variable, function declaration should occur first
 
 (define (emit-module scope module-name stmts)
   (define complete-module-name (list "window" "racketjs" "module" (symbol->js-compatible-string module-name)))
@@ -246,7 +284,7 @@
                           base-exports
                           (flatten
                            (map
-                            (lambda (name) (let ([n (symbol->js-compatible-string name)]) (cons n n)))
+                            (lambda (name) (cons name (symbol->js-compatible-string name)))
                             module-definition-names))))))
   (define emit-stmts
     (flatten

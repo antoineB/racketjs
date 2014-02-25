@@ -24,6 +24,7 @@
  (struct-out Literal)
  (struct-out Empty)
  (struct-out ConditionalOp)
+ (struct-out FieldAccess)
  ;;Try
  ;;Catch
  (struct-out New)
@@ -31,6 +32,7 @@
 
 (define-type JsExpr
   (U
+   FieldAccess
    VariableAccess
    Null
    Undefined
@@ -79,6 +81,8 @@
 (struct: ObjectExpr ([pairs  : (Listof (Pairof String JsExpr))]))
 (struct: Empty ())
 (struct: ConditionalOp ([test : JsExpr] [then : JsExpr] [else : JsExpr]))
+
+(struct: FieldAccess ([expr : JsExpr] [name : String]))
 
 (struct: New ([expr : JsExpr]))
 (struct: Return ([expr : JsExpr]) #:transparent)
@@ -259,6 +263,11 @@
     [(VariableAccess names)
      (string-join names ".")]
 
+    [(FieldAccess expr name)
+     (format "~a.~a"
+             (print-js-ast expr)
+             name)]
+    
     [(New expr)
      (with-paren 
       "new "
