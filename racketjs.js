@@ -54,7 +54,7 @@ window.racketjs.Char = function (data) {
     exports.list = function () {
 	var lst = exports.empty;
 
-	for (var i = 0; i < arguments.length; i++) {
+	for (var i = arguments.length - 1; i >= 0; i--) {
 	    lst = new window.racketjs.List(arguments[i], lst);
 	}
 
