@@ -85,6 +85,44 @@
       (string? expr)
       (number? expr)))
 
+(define (emit-literal expr)
+  (match expr
+    [(? literal? expr)
+     (Literal expr)]
+
+    [(list 'quote (? empty? expr))
+     (VariableAccess '("window" "racketjs" "module" "racketjs" "empty"))]
+    
+    [(? list?)
+     (FunctionCall
+      (VariableAccess '("window" "racketjs" "module" "racketjs" "list"))
+       (map emit-literal expr))]
+    
+    [(? symbol?)
+     (New (FunctionCall
+          (VariableAccess '("window" "racketjs" "Symbol"))
+          (list (Literal (symbol->js-compatible-string expr)))))]
+
+    [_ (raise (format "not a literal ~a" expr))]))
+
+(module+ test
+  (let ([data (emit-literal '(#t "aaa" 3.0 (1 abc)))]
+        [expected
+         (FunctionCall
+          (VariableAccess '("window" "racketjs" "module" "racketjs" "list"))
+          (list 
+           (Literal #t) (Literal "aaa") (Literal 3.0)
+           (FunctionCall
+            (VariableAccess '("window" "racketjs" "module" "racketjs" "list"))
+            (list
+             (Literal 1)
+             (New 
+              (FunctionCall
+               (VariableAccess '("window" "racketjs" "Symbol"))
+               (list (Literal "abc"))))))))])
+    (check-equal? data expected)))
+
+
 ;; scope : Context
 ;; maintaint a mapping of variable (when we introduce new names)
 (define (emit scope expr)
@@ -99,12 +137,15 @@
     [(list 'quote (? empty? expr))
      (VariableAccess '("window" "racketjs" "module" "racketjs" "empty"))]
 
-    ;;[(list 'quote (? list? expr))
+    [(list 'quote (and expr (? list? expr) (? (negate empty?))))
+     (FunctionCall
+      (VariableAccess '("window" "racketjs" "module" "racketjs" "list"))
+      (map emit-literal expr))]
 
     [(list 'quote (? symbol? expr))
      (New (FunctionCall
            (VariableAccess '("window" "racketjs" "Symbol"))
-           (list (symbol->js-compatible-string expr))))]
+           (list (Literal (symbol->js-compatible-string expr)))))]
 
     [(list-rest 'lambda args body)
      ;;TODO: use the arguments of js function to catch rest arg
@@ -157,14 +198,6 @@
       (list*
        (Null)
        (map (curry emit scope) args)))]
-
-    [(list '#%app 'values arg)
-     (emit scope arg)]
-    
-    [(list-rest '#%app 'values args)
-     (New
-      (FunctionCall (VariableAccess '("window" "racketjs" "values"))
-                    (map (curry emit scope) args)))]
 
     [(list-rest '#%app id args)
      (FunctionCall (VariableAccess (get-binding-path scope id))
@@ -240,7 +273,7 @@
 	 (list "window" "racketjs" "module" "racketjs" (symbol->js-compatible-string sym))
 	 sum)))
     empty
-    '(+ empty list cons first rest car cdr list? empty? pair? number? string? symbol?))))
+    '(+ empty list cons first rest car cdr list? empty? pair? number? string? symbol? values))))
 
 ;;TODO: Change the order of assignment of module level variable, function declaration should occur first
 

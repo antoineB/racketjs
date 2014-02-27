@@ -1,4 +1,4 @@
-#lang typed/racket
+#langf typed/racket
 
 (provide
  print-js-ast
@@ -68,7 +68,7 @@
    JsExpr
    JsStmt))
 
-(struct: Literal ([value : (U String Char Number Boolean)]))
+(struct: Literal ([value : (U String Char Number Boolean)]) #:transparent)
 (struct: VariableDcl ([name : String] [right : JsExpr]) #:transparent)
 (struct: Assign ([left : JsExpr] [right : JsExpr]) #:transparent)
 (struct: IfStmt ([test : JsExpr] [then : (Listof JsAst)] [else : (Listof JsAst)]))
@@ -84,7 +84,7 @@
 
 (struct: FieldAccess ([expr : JsExpr] [name : String]))
 
-(struct: New ([expr : JsExpr]))
+(struct: New ([expr : JsExpr]) #:transparent)
 (struct: Return ([expr : JsExpr]) #:transparent)
 ;; (struct: Try ())
 ;; (struct: Catch ())
