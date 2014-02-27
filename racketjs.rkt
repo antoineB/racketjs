@@ -206,7 +206,7 @@
     ;; no change in scope? (local / non local)
     [(list 'define-values (list arg) expr)
      (Assign
-      (VariableAccess (list (symbol->string arg)))
+      (VariableAccess (list (symbol->js-compatible-string arg)))
       (emit scope expr))]
 
      [(list 'define-values args (list-rest 'values exprs))
@@ -333,7 +333,7 @@
      (append
       (map
        (lambda (name)
-         (VariableDcl (symbol->string name) (Null)))
+         (VariableDcl (symbol->js-compatible-string name) (Null)))
        module-definition-names)
       emit-stmts
       (list
