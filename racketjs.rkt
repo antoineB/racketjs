@@ -163,7 +163,7 @@
     
     [(list-rest '#%app 'values args)
      (New
-      (FunctionCall (VariableAccess '("window" "racketjs" "Values"))
+      (FunctionCall (VariableAccess '("window" "racketjs" "values"))
                     (map (curry emit scope) args)))]
 
     [(list-rest '#%app id args)

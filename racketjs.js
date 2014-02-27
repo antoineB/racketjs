@@ -18,8 +18,8 @@ window.racketjs.Symbol = function (name) {
     this.name = name;
 };
 
-window.racketjs.Values = function () {
-    this.data = arguments;
+window.racketjs.Values = function (data) {
+    this.data = data;
 };
 
 window.racketjs.Char = function (data) {
@@ -132,5 +132,13 @@ window.racketjs.Char = function (data) {
 	}
 
 	return sum;
+    };
+    
+    exports.values = function () {
+	if (arguments.length == 1) {
+	    return arguments[0];
+	} else {
+	    return new window.racketjs.Values(arguments);
+	}
     };
 })();
