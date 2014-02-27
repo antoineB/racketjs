@@ -1,0 +1,18 @@
+* TODO remove some function that aren't in racket/base
+- first
+- rest
+- empty?
+* TODO implement equal?
+* TODO implement let-values, letrec-values
+* TODO reorder define at module level, put define that define lambda first
+* TODO implement a js ffi
+* TODO build racketjs lang 
+- export some racket/base binding
+- export macros to make certains expansion regarding we expect to generate the
+  code to js or not
+- export a binding that serve as a hook to js ffi (raise an exception for normal
+  code)
+  (define js-ffi (lambda _ (raise "This is for js purpose should not run on the racket vm")))
+- The differentiation between js target and racket vm is done by inserting (yes
+  literaly) a splicing-syntax-parameter before expansion. This insertion can
+  only be done by an external tool, so by the racket->js command.
