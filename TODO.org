@@ -1,7 +1,3 @@
-* TODO remove some function that aren't in racket/base
-- first
-- rest
-- empty?
 * TODO implement equal?
 * TODO implement let-values, letrec-values
 * TODO reorder define at module level, put define that define lambda first

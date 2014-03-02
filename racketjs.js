@@ -26,6 +26,8 @@ window.racketjs.Char = function (data) {
     this.data = data;
 };
 
+window.racketjs.NULL = function () {};
+
 (function () {
     var exports = window.racketjs.module.racketjs;
 
@@ -49,10 +51,10 @@ window.racketjs.Char = function (data) {
 	}
     };
 
-    exports.empty = new window.racketjs.List(null, null);
+    exports.null = new window.racketjs.NULL();
 
     exports.list = function () {
-	var lst = exports.empty;
+	var lst = exports.null;
 
 	for (var i = arguments.length - 1; i >= 0; i--) {
 	    lst = new window.racketjs.List(arguments[i], lst);
@@ -65,18 +67,8 @@ window.racketjs.Char = function (data) {
 	return lst instanceof window.racketjs.List;
     };
 
-    exports.empty_QUESTION_ = function (lst) {
-	return exports.empty === lst;
-    };
-
-    exports.first = function (lst) {
-	c.list(lst);
-	return lst.value;
-    };
-
-    exports.rest = function (lst) {
-	c.list(lst);
-	return lst.rest;
+    exports.null_QUESTION_ = function (lst) {
+	return exports.null === lst;
     };
 
     exports.pair_QUESTION_ = function (elem) {
@@ -140,5 +132,9 @@ window.racketjs.Char = function (data) {
 	} else {
 	    return new window.racketjs.Values(arguments);
 	}
+    };
+
+    exports.not = function (value) {
+	return false === value;
     };
 })();

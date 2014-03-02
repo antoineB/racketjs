@@ -1,7 +1,8 @@
-#langf typed/racket
+#lang typed/racket
 
 (provide
  print-js-ast
+ (struct-out Raw)
  (struct-out VariableAccess)
  (struct-out ArrayCall)
  (struct-out Null)
@@ -32,6 +33,7 @@
 
 (define-type JsExpr
   (U
+   Raw
    FieldAccess
    VariableAccess
    Null
@@ -68,6 +70,7 @@
    JsExpr
    JsStmt))
 
+(struct: Raw ([str : String]) #:transparent)
 (struct: Literal ([value : (U String Char Number Boolean)]) #:transparent)
 (struct: VariableDcl ([name : String] [right : JsExpr]) #:transparent)
 (struct: Assign ([left : JsExpr] [right : JsExpr]) #:transparent)
@@ -275,6 +278,9 @@
 
     [(Empty)
      ""]
+
+    [(Raw str)
+     str]
     
     ;; Try
     ;; Catch
