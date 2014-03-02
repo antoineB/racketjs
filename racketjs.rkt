@@ -273,7 +273,7 @@
 	 (list "window" "racketjs" "module" "racketjs" (symbol->js-compatible-string sym))
 	 sum)))
     empty
-    '(+ empty list cons car cdr list? null? null pair? number? string? symbol? values))))
+    '(+ empty list cons car cdr list? null? null pair? number? string? symbol? values parameter make-parameter))))
 
 ;;TODO: Change the order of assignment of module level variable, function declaration should occur first
 
@@ -952,7 +952,6 @@
 ;;    (make-log-receiver (#<module-path-index>))
 ;;    (make-logger (#<module-path-index>))
 ;;    (make-output-port (#<module-path-index>))
-;;    (make-parameter (#<module-path-index>))
 ;;    (make-phantom-bytes (#<module-path-index>))
 ;;    (make-pipe (#<module-path-index>))
 ;;    (make-placeholder (#<module-path-index>))
@@ -1058,7 +1057,6 @@
 ;;    (output-port? (#<module-path-index>))
 ;;    (pair? (#<module-path-index>))
 ;;    (parameter-procedure=? (#<module-path-index>))
-;;    (parameter? (#<module-path-index>))
 ;;    (parameterization? (#<module-path-index>))
 ;;    (path->bytes (#<module-path-index>))
 ;;    (path->complete-path (#<module-path-index>))
@@ -1468,3 +1466,6 @@
 ;;    (write-special-evt (#<module-path-index>))
 ;;    (write-string (#<module-path-index>))
 ;;    (zero? (#<module-path-index>))))
+
+
+

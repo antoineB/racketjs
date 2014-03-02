@@ -137,4 +137,26 @@ window.racketjs.NULL = function () {};
     exports.not = function (value) {
 	return false === value;
     };
+
+    exports.make_H_parameter = function (defaultValue) {
+	var fn = true;
+	fn = function () {
+	    if (arguments.length) {
+		fn.prototype.value = arguments[0];
+		return (void 0);
+	    } else {
+		return fn.prototype.value;
+	    }
+	};
+
+	fn.prototype.parameter = true;
+	fn.prototype.value = defaultValue;
+
+	return fn;
+    };
+
+    exports.parameter_QUESTION_ = function (value) {
+	return value.prototype && value.prototype.parameter == true;
+    };
+
 })();
