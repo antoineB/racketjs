@@ -223,7 +223,7 @@
        (FunctionExpr
         empty
        (cons
-        (VariableDcl "tmp" (FieldAccess (emit scope expr) "data"))
+        (VariableDcl "_tmp" (FieldAccess (emit scope expr) "data"))
         (let loop ([i 0]
                    [args (map symbol->js-compatible-string args)]
                    [result empty])
@@ -235,12 +235,55 @@
                (cons
                 (Assign
                  (VariableAccess (list (first args)))
-                 (ArrayCall (VariableAccess "tmp") (Literal i)))
+                 (ArrayCall (VariableAccess (list "_tmp")) (Literal i)))
                 result))))))
        empty)]
 
-     ;;  [(list 'let-values args (list-rest 'values exprs))
-     ;; Need to create a (function (...) { ...; return ...;})()
+     [(list-rest 'let-values defs body)
+      (let ([args-sym (map car defs)]
+	    [args (flatten (map (compose symbol->js-compatible-string car) defs))]
+	    [assignments 
+	     (flatten
+	      (for/list ([def defs]) 
+		(match def
+		  [(list (list arg) expr)
+		   (list (local-assign (symbol->js-compatible-string arg) (emit scope expr)))]
+		  [(list args (list-rest 'values exprs))
+		   (map 
+		    (lambda (arg expr) (local-assign (symbol->js-compatible-string arg) (emit scope expr)))
+		    args exprs)]
+		  [(list args expr)
+		   (local-encapsulation
+		    (cons
+		     (VariableDcl "_tmp" (FieldAccess (emit scope expr) "data"))
+		     (let loop ([i 0]
+				[args (map symbol->js-compatible-string args)]
+				[result empty])
+		       (if (empty? args)
+			   (reverse result)
+			   (loop
+			    (add1 i)
+			    (rest args)
+			    (cons
+			     (local-assign (first args)
+					   (ArrayCall (VariableAccess (list "_tmp")) (Literal i)))
+			     result))))))])))])
+	(local-encapsulation
+	 (append
+	  (map (lambda (name) (VariableDcl name (Null))) args)
+	  assignments)
+	 (Return
+	  (FunctionCall
+	   (FunctionExpr
+	    args
+	    (let* ([let-scope (add-local-scope scope (map cons args-sym args))]
+		   [stmts (map (curry emit let-scope) body)]
+		   [stmts-r (reverse stmts)])
+	      (reverse
+	       (cons
+		(Return (first stmts-r))
+		(rest stmts-r)))))
+	   args))))]
 
      [(list 'module name 'racket/base (list-rest '#%module-begin (list-rest 'module _) body))
       (emit-module scope name body)]
@@ -249,6 +292,18 @@
       #f]
 
      [_ (raise (format "unknown ~a" expr))]))
+
+(define (local-assign name expr)
+  (Assign
+   (VariableAccess (if (list? name) name (list name)))
+   expr))
+
+(define (local-encapsulation . exprs)
+  (FunctionCall
+   (FunctionExpr
+    empty
+    exprs)
+   empty))
 
 (define (list-subtract lst lst0)
   (set->list
