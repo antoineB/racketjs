@@ -15,8 +15,8 @@
                  expr)))
 
 (define-values (symbol->js-compatible-string js-compatible-string->symbol)
-  (let ([rkt '("_" "/" "?" "!" "-" "%" ">" "<" "=" "." "*" "+" "-")]
-        [js '("_U_" "_SLASH_" "_QUESTION_" "_IMPORTANT_" "_H_" "_PERCENT_" "_GREATER_" "_LESS_" "_EQUAL_" "_DOT_" "_TIMES_" "_PLUS_" "_MINUS_")])  
+  (let ([rkt '("_" "->" "/" "?" "!" "-" "%" ">" "<" "=" "." "*" "+" "-")]
+        [js '("_U_" "_ARROW_" "_SLASH_" "_QUESTION_" "_IMPORTANT_" "_H_" "_PERCENT_" "_GREATER_" "_LESS_" "_EQUAL_" "_DOT_" "_TIMES_" "_PLUS_" "_MINUS_")])  
     (define (transform pattern change fn-start fn-end name)
       (let loop ([pattern pattern]
                  [change change]
@@ -35,6 +35,8 @@
   (check-equal? (symbol->js-compatible-string 'string?) "string_QUESTION_")
   (check-equal? (symbol->js-compatible-string 'hash-add!) "hash_H_add_IMPORTANT_")
   (check-equal? (js-compatible-string->symbol "abc_H__U_") 'abc-_)
+  (check-equal? (js-compatible-string->symbol "char_ARROW_integer") 'char->integer)
+  (check-equal? (symbol->js-compatible-string 'char->integer) "char_ARROW_integer")
 )
 
 ;; funtion-scope a hash map symbol -> (listof string)
