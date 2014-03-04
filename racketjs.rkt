@@ -72,7 +72,7 @@
 (define (add-local-scope ctxt lst)
   (struct-copy Context ctxt
                [function-scope
-                (apply hash-set* (list* (Context-function-scope ctxt) lst))]))
+                (apply hash-set* (Context-function-scope ctxt) lst)]))
 
 ;; (define (remove-binding context sym)
 ;;   (struct-copy Context context
@@ -81,6 +81,19 @@
 ;; (define (add-binding context sym)
 ;;   (struct-copy Context context
 ;;            [scope (set-add (Context-scope context) sym)]))
+
+(define base-exports
+  (apply
+   hash
+   (foldr
+    (lambda (sym sum)
+       (cons
+	sym
+	(cons
+	 (list "window" "racketjs" "module" "racketjs" (symbol->js-compatible-string sym))
+	 sum)))
+    empty
+    '(+ empty list cons car cdr list? null? null pair? number? string? symbol? values parameter make-parameter))))
 
 (define (literal? expr)
   (or (boolean? expr)
@@ -242,8 +255,8 @@
        empty)]
 
      [(list-rest 'let-values defs body)
-      (let* ([args-sym (map car defs)]
-	     [args (flatten (map (compose symbol->js-compatible-string car) defs))]
+      (let* ([args-sym (flatten (map car defs))]
+	     [args (map symbol->js-compatible-string args-sym)]
 	     ;; used to ensure that the let-value forbid access same let-values
 	     ;; bindings
 	     [args-hidden (map (curry string-append "_") args)] 
@@ -276,19 +289,20 @@
 	(local-encapsulation
 	 (append
 	  (map (lambda (name) (VariableDcl name (Null))) args-hidden)
-	  assignments)
-	 (Return
-	  (FunctionCall
-	   (FunctionExpr
-	    args
-	    (let* ([let-scope (add-local-scope scope (map cons args-sym args))]
-		   [stmts (map (curry emit let-scope) body)]
-		   [stmts-r (reverse stmts)])
-	      (reverse
-	       (cons
-		(Return (first stmts-r))
-		(rest stmts-r)))))
-	   args-hidden))))]
+	  assignments
+          (list
+           (Return
+            (FunctionCall
+             (FunctionExpr
+              args
+              (let* ([let-scope (add-local-scope scope (flatten (map list args-sym args)))]
+                     [stmts (map (curry emit let-scope) body)]
+                     [stmts-r (reverse stmts)])
+                (reverse
+                 (cons
+                  (Return (first stmts-r))
+                  (rest stmts-r)))))
+             (map (compose VariableAccess list) args-hidden)))))))]
 
      [(list-rest 'letrec-values defs body)
       (let* ([args-sym (map car defs)]
@@ -344,12 +358,17 @@
 
      [_ (raise (format "unknown ~a" expr))]))
 
+(module+ test
+  (define vanilla-scope (context #:module-scope base-exports))
+  (let ([data (emit vanilla-scope '(let-values (((a) '1)) a))])
+    (print data)))
+
 (define (local-assign name expr)
   (Assign
    (VariableAccess (if (list? name) name (list name)))
    expr))
 
-(define (local-encapsulation . exprs)
+(define (local-encapsulation exprs)
   (FunctionCall
    (FunctionExpr
     empty
@@ -367,19 +386,6 @@
    (string-append
     (symbol->string sym)
     (symbol->string sym0))))
-
-(define base-exports
-  (apply
-   hash
-   (foldr
-    (lambda (sym sum)
-       (cons
-	sym
-	(cons
-	 (list "window" "racketjs" "module" "racketjs" (symbol->js-compatible-string sym))
-	 sum)))
-    empty
-    '(+ empty list cons car cdr list? null? null pair? number? string? symbol? values parameter make-parameter))))
 
 ;;TODO: Change the order of assignment of module level variable, function declaration should occur first
 
@@ -598,7 +604,6 @@
 ;;    (chaperone-struct-type (#<module-path-index>))
 ;;    (chaperone-vector (#<module-path-index>))
 ;;    (chaperone? (#<module-path-index>))
-;;    (char->integer (#<module-path-index>))
 ;;    (char-alphabetic? (#<module-path-index>))
 ;;    (char-blank? (#<module-path-index>))
 ;;    (char-ci<=? (#<module-path-index>))
@@ -627,7 +632,6 @@
 ;;    (char=? (#<module-path-index>))
 ;;    (char>=? (#<module-path-index>))
 ;;    (char>? (#<module-path-index>))
-;;    (char? (#<module-path-index>))
 ;;    (check-duplicate-identifier (#<module-path-index>))
 ;;    (checked-procedure-check-and-extract (#<module-path-index>))
 ;;    (choice-evt (#<module-path-index>))

@@ -48,6 +48,12 @@ window.racketjs.NULL = function () {};
 	    if (!(elem instanceof window.racketjs.Pair)) {
 		throw new TypeError("pair");
 	    }
+	},
+
+	char: function (elem) {
+	    if (!(elem instanceof window.racketjs.Char)) {
+		throw new TypeError("char");
+	    }
 	}
     };
 
@@ -158,5 +164,16 @@ window.racketjs.NULL = function () {};
     exports.parameter_QUESTION_ = function (value) {
 	return value.prototype && value.prototype.parameter == true;
     };
+
+    exports.char_QUESTION_ = function (elem) {
+	return elem instanceof window.racketjs.Char;
+    };
+
+    exports.char_ARROW_integer = function (char) {
+	c.char(char);
+
+	return char.data.charCodeAt(0);
+    };
+
 
 })();
