@@ -94,7 +94,7 @@
 
 (struct: VariableAccess ([names : (Listof String)]) #:transparent)
 
-(struct: Null ())
+(struct: Null () #:transparent)
 (struct: Undefined ())
 (struct: TypeOfExpr ([expr : JsExpr]))
 (struct: InstanceOfExpr ([left : JsExpr] [right : JsExpr]))

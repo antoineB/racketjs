@@ -37,6 +37,8 @@
   (check-equal? (js-compatible-string->symbol "abc_H__U_") 'abc-_)
   (check-equal? (js-compatible-string->symbol "char_ARROW_integer") 'char->integer)
   (check-equal? (symbol->js-compatible-string 'char->integer) "char_ARROW_integer")
+  (check-equal? (symbol->js-compatible-string '_ARROW_) "_U_ARROW_U_")
+  (check-equal? (js-compatible-string->symbol "_U_ARROW_U_") '_ARROW_)
 )
 
 ;; funtion-scope a hash map symbol -> (listof string)
@@ -360,8 +362,16 @@
 
 (module+ test
   (define vanilla-scope (context #:module-scope base-exports))
-  (let ([data (emit vanilla-scope '(let-values (((a) '1)) a))])
-    (print data)))
+  (let ([data (emit vanilla-scope '(let-values (((a) '1)) a))]
+	[expected 
+	 (FunctionCall 
+	  (FunctionExpr 
+	   empty 
+	   (list (VariableDcl "_a" (Null))
+		 (Assign (VariableAccess '("_a")) (Literal 1))
+		 (Return (FunctionCall (FunctionExpr '("a") (list (Return (VariableAccess '("a"))))) (list (VariableAccess '("_a")))))))
+	  empty)])
+    (check-equal? data expected)))
 
 (define (local-assign name expr)
   (Assign
